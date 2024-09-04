@@ -5,14 +5,23 @@ import sys
 
 # Settings
 # Diff returns less items
-check_if_exists_in_netsuite = True
+check_if_exists_in_netsuite = False
 
-multi_file_output = False
+multi_file_output = True
 row_limit = 24000
 
 # Filter Settings
 use_filtered_item_list = False
 filtered_item_list = "20240816_112829_unique_skus.csv"
+
+style_master_csv_path = "input_files/StyleMaster_20240820.csv"
+loaded_csv_path = "input_files/netsuite_children_20240830.csv"
+drop_list_path = "input_files/filtered_drop_list.csv"
+bluecherry_fob_path = "input_files/bluecherry_fob.csv"
+pricing_data_csv_path = "input_files/pricing_extract.csv"
+frozen_costs_data_path = "input_files/frozen_costs_july.csv"
+
+
 
 use_season_filter = False
 season_filster = "SP25"
@@ -60,6 +69,9 @@ def map_category(style_master_df, category_mapping):
 
 def create_child_production_items(style_master_df, size_code_mapping):
     child_production_items_df = pd.DataFrame()
+    frozen_costs_data_df = load_and_clean_csv(frozen_costs_data_path)
+    frozen_costs_data_df['Style-Color'] = frozen_costs_data_df.apply(lambda row: f"{row['Style']}-{row['Color #']}", axis=1)
+
     for size_column in size_code_mapping.values():
         child_production_items_df[size_column] = ''
     for index, row in style_master_df.iterrows():
@@ -69,6 +81,7 @@ def create_child_production_items(style_master_df, size_code_mapping):
     child_production_items_df['UPC Number'] = style_master_df['UPC Number']
     child_production_items_df['Style'] = style_master_df['Style']
     child_production_items_df['Style-Color'] = style_master_df.apply(lambda row: combine_columns_with_dash(row, ['Style', 'Color #']), axis=1)
+    child_production_items_df['Item Defined Cost'] = child_production_items_df['Style-Color'].map(frozen_costs_data_df.set_index('Style-Color')['Frozen Category Cost'])
     child_production_items_df['Style-Color-Size'] = style_master_df.apply(lambda row: combine_columns_with_dash(row, ['Style', 'Color #', 'SIZES']), axis=1)
     child_production_items_df['External ID'] = child_production_items_df['Style-Color-Size']
     child_production_items_df['Display Name'] = style_master_df['Style Name']
@@ -93,8 +106,8 @@ def create_child_production_items(style_master_df, size_code_mapping):
     child_production_items_df["Matrix Option Product Combo Sizes"] = child_production_items_df["Product Combo Sizes"]
     return child_production_items_df
 
-def filter_diff_items(df, loaded_df, column_name):
-    loaded_list = loaded_df[column_name].tolist()
+def filter_diff_items(df, loaded_netsuite_children_items, column_name):
+    loaded_list = loaded_netsuite_children_items[column_name].tolist()
     removed_items = df[df[column_name].isin(loaded_list)]
     df = df[~df[column_name].isin(loaded_list)]
     return df, removed_items
@@ -247,10 +260,8 @@ item_type_mapping = {
 print("INPUT FILES")
 print("----------------")
 
-style_master_csv_path = "input_files/" + 'StyleMaster_20240820.csv'
 style_master_df = load_and_clean_csv(style_master_csv_path, dtype={'UPC Number': str, 'Style': str, 'Size Code': str, 'Color #': str})
 style_master_df = process_style_master(style_master_df, vendor_mapping)
-
 if use_filtered_item_list:
     generation_list_path = "input_files/" + filtered_item_list
     generation_list_df = load_and_clean_csv(generation_list_path, dtype={'SKU': str})
@@ -261,15 +272,10 @@ if use_season_filter:
     style_master_df = style_master_df[style_master_df['Season'] == season_filster]
     print(f"Size of Style master after season filter: {len(style_master_df)}")
 
-loaded_csv_path = "input_files/" + "NetsuiteItems_20240820.csv"
-loaded_df = load_and_clean_csv(loaded_csv_path)
 
-drop_list_path = "input_files/" + "filtered_drop_list.csv"
+loaded_netsuite_children_items = load_and_clean_csv(loaded_csv_path)
 drop_list_df = load_and_clean_csv(drop_list_path)
-
-bluecherry_fob_path = "input_files/" + "bluecherry_fob.csv"
 bluecherry_fob_df = load_and_clean_csv(bluecherry_fob_path)
-
 drop_list = drop_list_df['Style-Color'].tolist()
 removed_items = style_master_df[style_master_df['Style-Color'].isin(drop_list)]
 style_master_df = style_master_df[~style_master_df['Style-Color'].isin(drop_list)]
@@ -282,7 +288,6 @@ category_mapping = pd.read_csv("input_files/" + "Category_Mapping.csv").set_inde
 print(f"Category mapping CSV path: 'Category_Mapping.csv', Number of records: {len(category_mapping)}")
 style_master_df = map_category(style_master_df, category_mapping)
 
-pricing_data_csv_path = "input_files/" + "pricing_extract.csv"
 pricing_data_df = load_and_clean_csv(pricing_data_csv_path, dtype={'Style-Color': str, 'RET_PRICE': float, 'A_PRICE': float})
 style_master_df['Style-Color'] = style_master_df['Style-Color'].str.replace(' ', '')
 print(f"Pricing data CSV path: {pricing_data_csv_path}, Number of records: {len(pricing_data_df)}")
@@ -291,30 +296,25 @@ print("Processing......")
 child_production_items_df = create_child_production_items(style_master_df, size_code_mapping)
 child_production_items_df["Label"] = style_master_df["Label"]
 
-# If the 'check_if_exists_in_netsuite' setting is enabled, filter out items from 'child_production_items_df' that are already present in 'loaded_df' based on the 'External ID' column, and store the removed items in 'loaded_children_removed_items'
+# If the 'check_if_exists_in_netsuite' setting is enabled, filter out items from 'child_production_items_df' that are already present in 'loaded_netsuite_children_items' based on the 'External ID' column, and store the removed items in 'loaded_children_removed_items'
 if check_if_exists_in_netsuite:
-    child_production_items_df, loaded_children_removed_items = filter_diff_items(child_production_items_df, loaded_df, 'External ID')
+    child_production_items_df, loaded_children_removed_items = filter_diff_items(child_production_items_df, loaded_netsuite_children_items, 'External ID')
 
 flattened_vendors_df = create_flattened_vendors_df(bluecherry_fob_df)
 child_copy_df = child_production_items_df[['Style-Color', 'Style-Color-Size']].copy()
 child_copy_with_vendors_df = child_copy_df.merge(flattened_vendors_df, on='Style-Color', how='left')
 
 save_dataframe_to_csv(child_copy_with_vendors_df, base_path, multi_file_output, "vendor_purchase_prices")
-
 items_with_blank_vendor_df = child_copy_with_vendors_df[child_copy_with_vendors_df['Vendor_1'].isnull()]
 child_copy_with_vendors_df = child_copy_with_vendors_df[child_copy_with_vendors_df['Vendor_1'].notnull()]
 
 save_dataframe_to_csv(items_with_blank_vendor_df, base_path, multi_file_output, "items_with_blank_vendor")
-
 child_production_items_df, samples_df = create_sample_items(child_production_items_df)
 sample_parent_items_df = create_sample_parent_items(samples_df)
 parent_items_df = create_parent_items(child_production_items_df, size_code_mapping)
 
-
-
-
 if check_if_exists_in_netsuite:
-    parent_items_df, removed_loaded_parents = filter_diff_items(parent_items_df, loaded_df, 'External ID')
+    parent_items_df, removed_loaded_parents = filter_diff_items(parent_items_df, loaded_netsuite_children_items, 'External ID')
 
 # Separate SMU items to their own file
 smu_items_df = child_production_items_df[child_production_items_df['Product | SMU'] == 'yes']
@@ -325,6 +325,10 @@ non_smu_parent_items_df = parent_items_df[~parent_items_df['Style-Color'].isin(s
 child_production_pricing_df = child_production_items_df.join(pricing_data_df.set_index('Style-Color')[['RET_PRICE', 'A_PRICE']], on='Style-Color', how='left')
 sample_pricing_df = samples_df.join(pricing_data_df.set_index('Style-Color')[['RET_PRICE', 'A_PRICE']], on='Style-Color', how='left')
 smu_pricing_df = smu_items_df.join(pricing_data_df.set_index('Style-Color')[['RET_PRICE', 'A_PRICE']], on='Style-Color', how='left')
+
+
+
+
 
 # TODO: log to seperate file
 # The 'Fabric Content' column might contain non-null but empty strings or other non-null falsy values.

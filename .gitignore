@@ -1,0 +1,7 @@
+.venv/*
+output/*
+input_files/*
+eaches.xml
+.aider*
+*.DS_Store*
+excelsheets/*
