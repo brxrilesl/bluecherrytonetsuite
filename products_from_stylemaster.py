@@ -7,14 +7,14 @@ import sys
 # Diff returns less items
 check_if_exists_in_netsuite = False
 
-multi_file_output = True
+multi_file_output = False
 row_limit = 24000
 
 # Filter Settings
 use_filtered_item_list = False
 filtered_item_list = "20240816_112829_unique_skus.csv"
 
-style_master_csv_path = "input_files/StyleMaster_20240820.csv"
+style_master_csv_path = "input_files/20240912_Style_Master.csv"
 loaded_csv_path = "input_files/netsuite_children_20240830.csv"
 drop_list_path = "input_files/filtered_drop_list.csv"
 bluecherry_fob_path = "input_files/bluecherry_fob.csv"
@@ -341,6 +341,27 @@ smu_items_df = smu_items_df[smu_items_df['Fabric Content'].notna() & smu_items_d
 non_smu_items_df = non_smu_items_df[non_smu_items_df['Fabric Content'].notna() & non_smu_items_df['Fabric Content'].str.strip().astype(bool)]
 smu_parent_items_df = smu_parent_items_df[smu_parent_items_df['Fabric Content'].notna() & smu_parent_items_df['Fabric Content'].str.strip().astype(bool)]
 non_smu_parent_items_df = non_smu_parent_items_df[non_smu_parent_items_df['Fabric Content'].notna() & non_smu_parent_items_df['Fabric Content'].str.strip().astype(bool)]
+
+
+
+child_production_items_df = child_production_items_df.drop_duplicates()
+samples_df = samples_df.drop_duplicates()
+sample_parent_items_df = sample_parent_items_df.drop_duplicates()
+parent_items_df = parent_items_df.drop_duplicates()
+smu_items_df = smu_items_df.drop_duplicates()
+smu_pricing_df = smu_pricing_df.drop_duplicates()
+non_smu_items_df = non_smu_items_df.drop_duplicates()
+smu_parent_items_df = smu_parent_items_df.drop_duplicates()
+non_smu_parent_items_df = non_smu_parent_items_df.drop_duplicates()
+
+child_production_items_df = child_production_items_df.dropna(axis=1, how='all')
+samples_df = samples_df.dropna(axis=1, how='all')
+sample_parent_items_df = sample_parent_items_df.dropna(axis=1, how='all')
+parent_items_df = parent_items_df.dropna(axis=1, how='all')
+smu_items_df = smu_items_df.dropna(axis=1, how='all')
+non_smu_items_df = non_smu_items_df.dropna(axis=1, how='all')
+smu_parent_items_df = smu_parent_items_df.dropna(axis=1, how='all')
+non_smu_parent_items_df = non_smu_parent_items_df.dropna(axis=1, how='all')
 
 print(f"Size of child production items DF: {len(non_smu_items_df)}")
 print(f"Size of parent production items DF: {len(parent_items_df)}")
